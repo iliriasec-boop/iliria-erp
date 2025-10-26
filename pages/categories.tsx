@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 type Category = { id: string; code: string; name: string; notes?: string }
 
-function pad3(n: number){ return String(n).padStart(3,'0') }
+function pad2(n: number){ return String(n).padStart(2,'0') }
 
 export default function CategoriesPage(){
   const [orgId, setOrgId] = useState<string | null>(null)
@@ -17,7 +17,7 @@ export default function CategoriesPage(){
 
   const nextCode = useMemo(() => {
     const max = list.reduce((m,c)=>Math.max(m, parseInt(c.code || '0')||0), 0)
-    return pad3(max+1)
+    return pad2(max+1)
   }, [list])
 
   useEffect(() => {

@@ -4,7 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { useEffect, useMemo, useState } from 'react'
 
 type Category = { code: string; name: string }
-type Product = { id: string; code: string; name: string; category_code: string; price: number; stock: number; low_stock: number }
+type Product = {
+  id: string; code: string; name: string; category_code: string;
+  price: number; stock: number; low_stock: number
+}
 type Settings = { currency: string; prefix_enabled: boolean; prefix_text: string; prefix_compact: boolean }
 
 function pad(n: number, w: number){ return String(n).padStart(w,'0') }
@@ -22,7 +25,7 @@ export default function ProductsPage(){
   const [cat, setCat] = useState('')
   const [price, setPrice] = useState<number>(0)
   const [stock, setStock] = useState<number>(0)
-  const [low, setLow] = useState<number>(0)
+  const [low, setLow] = useState<number>(2) // default 2
   const [nextIndex, setNextIndex] = useState<number>(1)
 
   const codePreview = useMemo(() => {
@@ -34,36 +37,46 @@ export default function ProductsPage(){
     return `${cat}-${idx}`
   }, [cat, nextIndex, settings])
 
+  function clearForm(){
+    setName(''); setCat(''); setPrice(0); setStock(0); setLow(2); setNextIndex(1); setErr(null)
+  }
+
   useEffect(() => {
     (async () => {
       setLoading(true); setErr(null)
-      // org
       const mem = await supabase.from('org_members').select('org_id').limit(1)
       const oid = mem.data?.[0]?.org_id || null
       setOrgId(oid)
 
       if (oid){
-        // settings
-        const { data: set } = await supabase.from('settings').select('currency,prefix_enabled,prefix_text,prefix_compact').eq('org_id', oid).single()
+        const { data: set } = await supabase
+          .from('settings')
+          .select('currency,prefix_enabled,prefix_text,prefix_compact')
+          .eq('org_id', oid).single()
         setSettings(set as any)
 
-        // categories
-        const { data: c } = await supabase.from('categories').select('code,name').eq('org_id', oid).order('code')
+        const { data: c } = await supabase
+          .from('categories').select('code,name').eq('org_id', oid).order('code')
         setCats(c || [])
 
-        // products
-        const { data: p } = await supabase.from('products').select('id,code,name,category_code,price,stock,low_stock').eq('org_id', oid).order('code')
+        const { data: p } = await supabase
+          .from('products')
+          .select('id,code,name,category_code,price,stock,low_stock')
+          .eq('org_id', oid).order('code')
         setList(p || [])
       }
       setLoading(false)
     })()
   }, [])
 
-  // Όταν αλλάζει κατηγορία, βρίσκουμε τον επόμενο αύξοντα
+  // όταν αλλάζει κατηγορία, βρες επόμενο αύξοντα
   useEffect(() => {
     (async () => {
       if (!orgId || !cat){ setNextIndex(1); return }
-      const { count } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('category_code', cat)
+      const { count } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('org_id', orgId).eq('category_code', cat)
       setNextIndex((count || 0) + 1)
     })()
   }, [orgId, cat])
@@ -74,7 +87,6 @@ export default function ProductsPage(){
     if (!cat || !name.trim()){ setErr('Συμπλήρωσε Όνομα και Κατηγορία.'); return }
     setErr(null)
 
-    // Δημιουργία κωδικού με βάση τα settings
     const idx = pad(nextIndex, 4)
     let code = `${cat}-${idx}`
     if (settings){
@@ -101,9 +113,12 @@ export default function ProductsPage(){
     if (error){ setErr(error.message); return }
 
     // refresh
-    const { data: p } = await supabase.from('products').select('id,code,name,category_code,price,stock,low_stock').eq('org_id', orgId).order('code')
+    const { data: p } = await supabase
+      .from('products')
+      .select('id,code,name,category_code,price,stock,low_stock')
+      .eq('org_id', orgId).order('code')
     setList(p || [])
-    setName(''); setCat(''); setPrice(0); setStock(0); setLow(0); setNextIndex(1)
+    clearForm()
   }
 
   return (
@@ -111,23 +126,58 @@ export default function ProductsPage(){
       <Layout>
         <h1 className="text-xl font-semibold mb-4">Προϊόντα</h1>
 
-        {!orgId && <div className="card mb-4 text-sm">Δεν βρέθηκε οργάνωση για τον χρήστη (org_members).</div>}
+        {!orgId && <div className="card mb-4 text-sm">
+          Δεν βρέθηκε οργάνωση για τον χρήστη (org_members).
+        </div>}
 
-        <form onSubmit={addProduct} className="card mb-6 grid gap-2">
+        <form onSubmit={addProduct} className="card mb-6 grid gap-3">
           <div className="text-lg font-medium">➕ Νέο Προϊόν</div>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <input className="input md:col-span-2" placeholder="Όνομα" value={name} onChange={e=>setName(e.target.value)} />
-            <select className="input" value={cat} onChange={e=>setCat(e.target.value)}>
-              <option value="">— Κατηγορία —</option>
-              {cats.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
-            </select>
-            <input className="input" value={codePreview} readOnly title="Κωδικός (auto)"/>
-            <input className="input" type="number" step="0.01" placeholder="Τιμή" value={price} onChange={e=>setPrice(parseFloat(e.target.value||'0'))} />
-            <input className="input" type="number" placeholder="Απόθεμα" value={stock} onChange={e=>setStock(parseInt(e.target.value||'0'))} />
-            <input className="input" type="number" placeholder="Όριο Low" value={low} onChange={e=>setLow(parseInt(e.target.value||'0'))} />
+
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-1">🛒 Όνομα</label>
+              <input className="input" placeholder="π.χ. Κάμερα IP 4MP"
+                     value={name} onChange={e=>setName(e.target.value)} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">📁 Κατηγορία</label>
+              <select className="input" value={cat} onChange={e=>setCat(e.target.value)}>
+                <option value="">— Επιλέξτε —</option>
+                {cats.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">🏷️ Κωδικός (auto)</label>
+              <input className="input" value={codePreview} readOnly />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">💶 Τιμή Πώλησης (€)</label>
+              <input className="input" type="number" step="0.01" placeholder="π.χ. 45.00"
+                     value={price} onChange={e=>setPrice(parseFloat(e.target.value||'0'))} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">📦 Απόθεμα</label>
+              <input className="input" type="number" placeholder="π.χ. 10"
+                     value={stock} onChange={e=>setStock(parseInt(e.target.value||'0'))} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">⚠️ Όριο Χαμηλού Αποθέματος</label>
+              <input className="input" type="number" placeholder="π.χ. 2"
+                     value={low} onChange={e=>setLow(parseInt(e.target.value||'0'))} />
+            </div>
           </div>
+
           {err && <div className="text-red-600 text-sm">{err}</div>}
-          <div><button className="btn btn-primary" type="submit">Καταχώριση</button></div>
+
+          <div className="flex gap-2">
+            <button className="btn btn-primary" type="submit">Καταχώριση</button>
+            <button className="btn" type="button" onClick={clearForm}>Καθαρισμός</button>
+          </div>
         </form>
 
         {loading ? <div>Φόρτωση…</div> :

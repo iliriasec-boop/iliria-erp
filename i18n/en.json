@@ -1,0 +1,30 @@
+{
+  "app": {
+    "title": "Iliria ERP",
+    "logout": "Logout",
+    "language": "Language",
+    "el": "Greek",
+    "en": "English"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "haveAccount": "Already have an account? Login",
+    "noAccount": "No account? Register"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "categories": "Categories",
+    "products": "Products",
+    "transactions": "Transactions",
+    "settings": "Settings"
+  },
+  "dash": {
+    "welcome": "Welcome",
+    "stockValue": "Stock Value",
+    "productsCount": "Products",
+    "lowStock": "Low Stock"
+  }
+}

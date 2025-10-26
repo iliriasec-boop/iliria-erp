@@ -1,0 +1,30 @@
+{
+  "app": {
+    "title": "Iliria ERP",
+    "logout": "Αποσύνδεση",
+    "language": "Γλώσσα",
+    "el": "Ελληνικά",
+    "en": "Αγγλικά"
+  },
+  "auth": {
+    "login": "Είσοδος",
+    "register": "Εγγραφή",
+    "email": "Email",
+    "password": "Κωδικός",
+    "haveAccount": "Έχεις ήδη λογαριασμό; Είσοδος",
+    "noAccount": "Δεν έχεις λογαριασμό; Εγγραφή"
+  },
+  "nav": {
+    "dashboard": "Πίνακας",
+    "categories": "Κατηγορίες",
+    "products": "Προϊόντα",
+    "transactions": "Κινήσεις",
+    "settings": "Ρυθμίσεις"
+  },
+  "dash": {
+    "welcome": "Καλώς ήρθες",
+    "stockValue": "Αξία Αποθέματος",
+    "productsCount": "Προϊόντα",
+    "lowStock": "Χαμηλό Απόθεμα"
+  }
+}

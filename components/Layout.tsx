@@ -34,6 +34,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link href="/products">{t.nav.products}</Link>
             <Link href="/transactions">{t.nav.transactions}</Link>
             <Link href="/settings">{t.nav.settings}</Link>
+            <Link href="/usage">{t.nav.usage}</Link>
+
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <select value={lang} onChange={e=>switchLang(e.target.value as any)} className="input w-28">

@@ -15,12 +15,14 @@
     "noAccount": "Δεν έχεις λογαριασμό; Εγγραφή"
   },
   "nav": {
-    "dashboard": "Πίνακας",
-    "categories": "Κατηγορίες",
-    "products": "Προϊόντα",
-    "transactions": "Κινήσεις",
-    "settings": "Ρυθμίσεις"
-  },
+  "dashboard": "Πίνακας",
+  "categories": "Κατηγορίες",
+  "products": "Προϊόντα",
+  "transactions": "Κινήσεις",
+  "settings": "Ρυθμίσεις",
+  "usage": "Χρήση"
+}
+},
   "dash": {
     "welcome": "Καλώς ήρθες",
     "stockValue": "Αξία Αποθέματος",

@@ -15,12 +15,13 @@
     "noAccount": "No account? Register"
   },
   "nav": {
-    "dashboard": "Dashboard",
-    "categories": "Categories",
-    "products": "Products",
-    "transactions": "Transactions",
-    "settings": "Settings"
-  },
+  "dashboard": "Dashboard",
+  "categories": "Categories",
+  "products": "Products",
+  "transactions": "Transactions",
+  "settings": "Settings",
+  "usage": "Usage"
+},
   "dash": {
     "welcome": "Welcome",
     "stockValue": "Stock Value",

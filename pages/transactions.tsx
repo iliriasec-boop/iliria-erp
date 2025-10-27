@@ -235,8 +235,17 @@ export default function TransactionsPage() {
               <label className="block text-sm font-medium mb-1">
                 {type === 'sale' ? '💶 Τιμή Μονάδας' : '💰 Κόστος Μονάδας'}
               </label>
-              <input className="input" type="text" inputMode="decimal"
-                     value={unit} onChange={e => setUnit(toNum(e.target.value))}/>
+              <input
+  className="input"
+  type="text"
+  value={unit === 0 ? '' : unit.toString().replace('.', ',')}
+  onChange={(e) => {
+    const val = e.target.value.replace(/[^\d,\.]/g, '') // μόνο αριθμοί και κόμμα/τελεία
+    setUnit(toNum(val))
+  }}
+  placeholder="π.χ. 45,23"
+/>
+
             </div>
 
             <div className="md:col-span-2">

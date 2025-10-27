@@ -28,14 +28,35 @@ type TxnRow = {
   note: string | null
 }
 
+// δέχεται κόμμα/τελεία, επιστρέφει number (ή 0)
+function toNum(v: string): number {
+  if (!v) return 0
+  const cleaned = v.replace(/\s+/g, '').replace(',', '.')
+  const n = parseFloat(cleaned)
+  return isNaN(n) ? 0 : n
+}
+
+// κρατάμε μόνο επιτρεπτούς χαρακτήρες: προαιρετικό -, ψηφία, ένα κόμμα/τελεία
+const sanitizeDecimal = (s: string) => {
+  // επιτρέπει - στην αρχή, και μόνο ένα διαχωριστικό , ή .
+  s = s.replace(/[^\d,.\-]/g, '')
+  // μόνο ένα leading -
+  s = s.replace(/(?!^)-/g, '')
+  // αν υπάρχουν πολλαπλά , ή . κρατά το πρώτο
+  const firstSep = s.search(/[,.]/)
+  if (firstSep !== -1) {
+    const head = s.slice(0, firstSep + 1)
+    const tail = s.slice(firstSep + 1).replace(/[,.]/g, '')
+    s = head + tail
+  }
+  return s
+}
+
 function mapDbType(t: UiTxn): 'purchase'|'sale'|'adjust' {
   if (t === 'sale') return 'sale'
   if (t === 'adjust') return 'adjust'
   return 'purchase'
 }
-
-// δέχεται και κόμμα (π.χ. "15,48")
-const toNum = (v: string) => parseFloat((v || '0').toString().replace(',', '.'))
 
 export default function TransactionsPage() {
   const [orgId, setOrgId] = useState<string | null>(null)
@@ -48,10 +69,10 @@ export default function TransactionsPage() {
   // ---- form ----
   const [type, setType] = useState<UiTxn>('purchase')
   const [productId, setProductId] = useState<string>('')
-  const [qty, setQty] = useState<number>(1)
-  const [unit, setUnit] = useState<number>(0)
+  const [qtyStr, setQtyStr] = useState<string>('1')
+  const [unitStr, setUnitStr] = useState<string>('0')
   const [note, setNote] = useState<string>('')
-  const [updateListPrice, setUpdateListPrice] = useState<boolean>(false) // ΝΕΟ: ενημέρωση προτεινόμενης τιμής μόνο αν το θες
+  const [updateListPrice, setUpdateListPrice] = useState<boolean>(false)
 
   const sel = useMemo(() => products.find(p => p.id === productId) || null, [products, productId])
 
@@ -90,7 +111,12 @@ export default function TransactionsPage() {
   }
 
   function clearForm() {
-    setType('purchase'); setProductId(''); setQty(1); setUnit(0); setNote(''); setUpdateListPrice(false)
+    setType('purchase')
+    setProductId('')
+    setQtyStr('1')
+    setUnitStr('0')
+    setNote('')
+    setUpdateListPrice(false)
     setErr(null); setOk(null)
   }
 
@@ -98,7 +124,12 @@ export default function TransactionsPage() {
     e.preventDefault()
     if (!orgId) return
     if (!sel) { setErr('Διάλεξε προϊόν.'); return }
-    if (qty <= 0) { setErr('Μη έγκυρη ποσότητα.'); return }
+
+    const qty = toNum(qtyStr)
+    const unit = toNum(unitStr)
+
+    if (type !== 'adjust' && qty <= 0) { setErr('Η ποσότητα πρέπει να είναι > 0.'); return }
+    if (type === 'sale' && qty > (sel?.stock ?? 0)) { setErr('Δεν υπάρχει αρκετό απόθεμα.'); return }
 
     setErr(null); setOk(null)
     const typeDb = mapDbType(type)
@@ -133,10 +164,9 @@ export default function TransactionsPage() {
       }
 
       if (type === 'sale') {
-        if (qty > sel.stock) { setErr('Δεν υπάρχει αρκετό απόθεμα.'); return }
         const newQty = sel.stock - qty
 
-        // ΔΕΝ αλλάζουμε την προτεινόμενη τιμή, εκτός αν το τικάρεις
+        // ΔΕΝ αλλάζουμε την προτεινόμενη τιμή εκτός αν το τικάρεις
         const patch: Partial<Product> = { stock: newQty }
         if (updateListPrice) (patch as any).price = unit
 
@@ -162,7 +192,7 @@ export default function TransactionsPage() {
       }
 
       if (type === 'adjust') {
-        const newQty = sel.stock + qty // αρνητικό/θετικό
+        const newQty = sel.stock + qty // qty μπορεί να είναι και αρνητικό
 
         const { error: upErr } = await supabase.from('products').update({
           stock: newQty < 0 ? 0 : newQty
@@ -227,8 +257,14 @@ export default function TransactionsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">🔢 Ποσότητα</label>
-              <input className="input" type="text" inputMode="decimal"
-                     value={qty} onChange={e => setQty(toNum(e.target.value))}/>
+              <input
+                className="input"
+                type="text"
+                inputMode="decimal"
+                value={qtyStr}
+                onChange={(e) => setQtyStr(sanitizeDecimal(e.target.value))}
+                placeholder={type === 'adjust' ? 'π.χ. -2' : 'π.χ. 3'}
+              />
             </div>
 
             <div>
@@ -236,16 +272,13 @@ export default function TransactionsPage() {
                 {type === 'sale' ? '💶 Τιμή Μονάδας' : '💰 Κόστος Μονάδας'}
               </label>
               <input
-  className="input"
-  type="text"
-  value={unit === 0 ? '' : unit.toString().replace('.', ',')}
-  onChange={(e) => {
-    const val = e.target.value.replace(/[^\d,\.]/g, '') // μόνο αριθμοί και κόμμα/τελεία
-    setUnit(toNum(val))
-  }}
-  placeholder="π.χ. 45,23"
-/>
-
+                className="input"
+                type="text"
+                inputMode="decimal"
+                value={unitStr}
+                onChange={(e) => setUnitStr(sanitizeDecimal(e.target.value))}
+                placeholder="π.χ. 45,23"
+              />
             </div>
 
             <div className="md:col-span-2">

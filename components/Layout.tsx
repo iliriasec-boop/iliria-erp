@@ -33,6 +33,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link href="/categories">{t.nav.categories}</Link>
             <Link href="/products">{t.nav.products}</Link>
             <Link href="/transactions">{t.nav.transactions}</Link>
+            <Link href="/offers">{t.nav.offers}</Link>
             <Link href="/settings">{t.nav.settings}</Link>
             <Link href="/usage">{t.nav.usage}</Link>
 

@@ -220,6 +220,16 @@ export default function ProductsPage(){
               <input className="input" placeholder="π.χ. Κάμερα IP 4MP"
                      value={name} onChange={e=>setName(e.target.value)} />
             </div>
+            // Στη φόρμα προϊόντος – κάτω από το "Όνομα"
+<label className="block text-sm font-medium mb-1">📝 Περιγραφή (μικρή)</label>
+<textarea
+  className="input"
+  rows={3}
+  placeholder="π.χ. Κάμερα 8MP, φακός 2.8mm, IR 30m, IP67"
+  value={form.description || ''}
+  onChange={(e)=> setForm({...form, description: e.target.value})}
+/>
+
 
             <div>
               <label className="block text-sm font-medium mb-1">📁 Κατηγορία</label>

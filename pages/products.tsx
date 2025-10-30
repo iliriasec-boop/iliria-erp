@@ -176,45 +176,59 @@ function buildCode(category_code: string, nextIdx: number) {
     return data.publicUrl || null
   }
 
-  // ------------ Create / Update -------------
-  async function save(e: React.FormEvent) {
-    e.preventDefault()
-    if (!orgId) return
-    if (!form.category_code) { setErr('Διάλεξε κατηγορία.'); return }
-    if (!form.code) { setErr('Δεν δημιουργήθηκε κωδικός προϊόντος.'); return }
-    if (!form.name.trim()) { setErr('Γράψε όνομα προϊόντος.'); return }
+ async function save(e: React.FormEvent) {
+  e.preventDefault()
+  if (!orgId) return
+  if (!form.name.trim()) { setErr('Γράψε όνομα.'); return }
+  if (!form.category_code) { setErr('Διάλεξε κατηγορία.'); return }
 
-    setErr(null); setOk(null)
-    const imageUrl = await uploadImageIfAny()
+  setErr(null); setOk(null)
+  const img = await uploadImageIfAny()
+
+  if (!editing) {
+    // ΥΠΟΛΟΓΙΖΟΥΜΕ index+code ΓΙΑ ΤΗΝ ΚΑΙΝΟΥΡΓΙΑ ΚΑΤΑΧΩΡΙΣΗ
+    const idx = nextIndexForCategory(form.category_code)
+    const newCode = buildCode(form.category_code, idx)
 
     const payload = {
       org_id: orgId,
-      code: form.code,
+      code: newCode,
       category_code: form.category_code,
       name: form.name.trim(),
       description: form.description?.trim() || null,
       price: toNum(form.price),
       stock: toNum(form.stock),
-      image_url: imageUrl
+      low_stock: toNum(form.low),
+      image_url: img,
+      product_index: idx             // <-- ΠΕΡΝΑΜΕ ΤΟ index (NOT NULL)
     }
 
-    try {
-      if (editing && form.id) {
-        const { error } = await supabase.from('products').update(payload)
-          .eq('org_id', orgId).eq('id', form.id)
-        if (error) throw error
-        setOk('Το προϊόν ενημερώθηκε.')
-      } else {
-        const { error } = await supabase.from('products').insert([payload])
-        if (error) throw error
-        setOk('Το προϊόν δημιουργήθηκε.')
-      }
-      await loadProducts(orgId)
-      resetForm()
-    } catch (e: any) {
-      setErr(e.message || 'Σφάλμα αποθήκευσης.')
+    const { error } = await supabase.from('products').insert([payload])
+    if (error) { setErr(error.message); return }
+    setOk('Καταχωρήθηκε.')
+  } else {
+    // ΣΤΟ UPDATE δεν αλλάζουμε product_index/κωδικό
+    const payload = {
+      category_code: form.category_code,
+      name: form.name.trim(),
+      description: form.description?.trim() || null,
+      price: toNum(form.price),
+      stock: toNum(form.stock),
+      low_stock: toNum(form.low),
+      image_url: img
     }
+    const { error } = await supabase.from('products')
+      .update(payload)
+      .eq('org_id', orgId)
+      .eq('id', form.id)
+    if (error) { setErr(error.message); return }
+    setOk('Ενημερώθηκε.')
   }
+
+  await loadProducts(orgId)
+  resetForm()
+}
+
 
   function editRow(p: Product) {
     setEditing(true)

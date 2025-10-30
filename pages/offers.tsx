@@ -168,33 +168,52 @@ export default function OffersPage(){
   }
 
   async function printOffer(offerId: string){
-    const data = await fetchOfferFull(offerId); if (!data) return
-    const { offer, lines, sub, discount, afterDisc, vatAmt, grand } = data
-    const win = window.open('', '_blank', 'width=900,height=1200'); if (!win) return
-    win.document.write(`
+  const data = await fetchOfferFull(offerId); if (!data) return
+  const { offer, lines, sub, discount, afterDisc, vatAmt, grand } = data
+
+  // HTML με πιο «πλούσιο» layout
+  const html = `
 <!DOCTYPE html><html lang="el"><head>
 <meta charset="utf-8"/>
 <title>Προσφορά ${offer.code}</title>
 <style>
   @page { size: A4; margin: 14mm; }
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; color:#111; }
-  h1 { font-size: 18px; margin: 0 0 6px; }
-  .meta { font-size: 12px; color:#555; margin-bottom: 12px; }
-  table { width:100%; border-collapse: collapse; font-size: 12px; }
-  th, td { padding: 8px; border-bottom: 1px solid #eee; vertical-align: top; }
-  th { text-align:left; color:#555; }
-  .right { text-align:right; white-space:nowrap; }
-  .totals td { border:none; padding:4px 0; }
+  *{ box-sizing:border-box }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; color:#111; }
+  .head { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
   .logo { height: 42px; }
-  .img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #eee; }
-  .desc { color:#444; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .meta { font-size: 12px; color:#555; }
+  .box { border:1px solid #e6e6e6; border-radius:10px; padding:12px; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:10px }
+  table { width:100%; border-collapse: collapse; font-size: 12px; margin-top:10px; }
+  th, td { padding: 8px; vertical-align: top; }
+  thead th { background:#fafafa; color:#555; border-bottom:1px solid #eee; text-align:left; }
+  tbody tr { border-bottom:1px solid #f1f1f1; }
+  .right { text-align:right; white-space:nowrap; }
+  .img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #eee; background:#fff; }
+  .desc { color:#444; margin-top:4px }
+  .totals { width: 320px; }
+  .totals td { padding:4px 0; }
+  footer { margin-top: 12px; font-size: 11px; color:#666 }
 </style>
 </head><body>
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+  <div class="head">
     ${logoUrl ? `<img class="logo" src="${logoUrl}" />` : ''}
     <div>
       <h1>Προσφορά ${offer.code}</h1>
       <div class="meta">Ημ/νία: ${new Date(offer.created_at).toLocaleDateString('el-GR')} · Πελάτης: ${offer.customer_name || '-'}</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="box">
+      <div style="font-size:12px;color:#666;margin-bottom:6px">Στοιχεία Πελάτη</div>
+      <div style="font-size:13px"><b>${offer.customer_name || '-'}</b><br/>${offer.customer_email || ''}</div>
+    </div>
+    <div class="box">
+      <div style="font-size:12px;color:#666;margin-bottom:6px">Όροι</div>
+      <div style="font-size:12px">Ισχύς προσφοράς: 30 ημέρες · Παράδοση: 3–7 εργάσιμες · Πληρωμή: 50% προκαταβολή</div>
     </div>
   </div>
 
@@ -203,7 +222,7 @@ export default function OffersPage(){
       <tr>
         <th>#</th>
         <th>Εικόνα</th>
-        <th>Κωδικός</th>
+        <th style="width:30%">Κωδικός / Τίτλος</th>
         <th>Περιγραφή</th>
         <th class="right">Ποσ.</th>
         <th class="right">Τιμή</th>
@@ -215,10 +234,12 @@ export default function OffersPage(){
         <tr>
           <td>${r.position}</td>
           <td>${r.image_url ? `<img class="img" src="${r.image_url}"/>` : ''}</td>
-          <td>${r.product_code || ''}</td>
           <td>
-            <div>${r.name}</div>
-            ${r.description ? `<div class="desc">${r.description}</div>` : ''}
+            ${r.product_code ? `<div style="font-family:monospace">${r.product_code}</div>` : ''}
+            <div><b>${r.name}</b></div>
+          </td>
+          <td>
+            ${r.description ? `<div class="desc">${r.description}</div>` : '<span style="color:#aaa">—</span>'}
           </td>
           <td class="right">${Number(r.qty).toLocaleString('el-GR')}</td>
           <td class="right">${Number(r.unit_price).toLocaleString('el-GR', {minimumFractionDigits:2})}</td>
@@ -229,22 +250,39 @@ export default function OffersPage(){
   </table>
 
   <div style="margin-top:10px; display:flex; justify-content:flex-end;">
-    <table style="width: 320px;">
-      <tr class="totals"><td>Υποσύνολο</td><td class="right">${sub.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
-      <tr class="totals"><td>Έκπτωση (${offer.discount_percent || 0}%)</td><td class="right">-${discount.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
-      <tr class="totals"><td>Μερικό</td><td class="right">${afterDisc.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
-      <tr class="totals"><td>ΦΠΑ (${offer.vat_percent || 0}%)</td><td class="right">${vatAmt.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
-      <tr class="totals"><td><b>Πληρωτέο</b></td><td class="right"><b>${grand.toLocaleString('el-GR',{minimumFractionDigits:2})}</b></td></tr>
+    <table class="totals">
+      <tr><td>Υποσύνολο</td><td class="right">${sub.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
+      <tr><td>Έκπτωση (${offer.discount_percent || 0}%)</td><td class="right">-${discount.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
+      <tr><td>Μερικό</td><td class="right">${afterDisc.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
+      <tr><td>ΦΠΑ (${offer.vat_percent || 0}%)</td><td class="right">${vatAmt.toLocaleString('el-GR',{minimumFractionDigits:2})}</td></tr>
+      <tr><td><b>Πληρωτέο</b></td><td class="right"><b>${grand.toLocaleString('el-GR',{minimumFractionDigits:2})}</b></td></tr>
     </table>
   </div>
 
-  ${offer.notes ? `<div style="margin-top:14px; font-size:12px; color:#444;"><b>Σημειώσεις:</b> ${offer.notes}</div>` : ''}
+  ${offer.notes ? `<div style="margin-top:10px" class="box"><b>Σημειώσεις:</b><div style="margin-top:6px;font-size:12px">${offer.notes}</div></div>` : ''}
 
-  <script>window.print();</script>
-</body></html>
-    `)
-    win.document.close()
-  }
+  <footer>Iliria Digisat · Τηλ. · Email · ΑΦΜ/ΔΟΥ · IBAN</footer>
+
+  <script>
+    // Περίμενε να φορτώσουν ΟΛΕΣ οι εικόνες πριν το print (αλλιώς δε φαίνονται)
+    function imagesReady() {
+      const imgs = Array.from(document.images);
+      if (imgs.length === 0) return Promise.resolve();
+      return Promise.all(imgs.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(res => { img.addEventListener('load', res); img.addEventListener('error', res); });
+      }));
+    }
+    imagesReady().then(()=> setTimeout(()=>window.print(), 150));
+  </script>
+</body></html>`
+
+  // Άνοιγμα & render
+  const win = window.open('', '_blank', 'width=900,height=1200'); if (!win) return
+  win.document.write(html)
+  win.document.close()
+}
+
 
   async function emailOffer(offerId: string){
     const data = await fetchOfferFull(offerId); if (!data) return

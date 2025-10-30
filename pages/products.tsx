@@ -5,8 +5,15 @@ import { useEffect, useMemo, useState } from 'react'
 
 type Category = { code: string; name: string }
 type Product = {
-  id: string; code: string; name: string; category_code: string;
-  price: number; stock: number; low_stock: number; image_url: string | null
+  id: string
+  code: string
+  name: string
+  category_code: string
+  price: number
+  stock: number
+  image_url?: string | null
+  avg_cost?: number
+  description?: string | null   // <-- ΝΕΟ
 }
 type Settings = { currency: string; prefix_enabled: boolean; prefix_text: string; prefix_compact: boolean }
 

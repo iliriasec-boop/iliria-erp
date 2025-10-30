@@ -12,11 +12,13 @@ type Product = {
   name: string
   price: number
   stock: number
-  avg_cost?: number | null
+  low_stock?: number | null
   image_url?: string | null
   description?: string | null
+  product_index?: number           // <-- ΝΕΟ
   created_at?: string
 }
+
 
 type FormState = {
   id?: string

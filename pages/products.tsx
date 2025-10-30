@@ -1,387 +1,391 @@
 import Layout from '@/components/Layout'
 import RequireAuth from '@/components/RequireAuth'
 import { supabase } from '@/lib/supabase'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-type Category = { code: string; name: string }
+type Category = { id?: string; code: string; name: string }
 type Product = {
   id: string
+  org_id: string
   code: string
-  name: string
   category_code: string
+  name: string
   price: number
   stock: number
+  avg_cost?: number | null
   image_url?: string | null
-  avg_cost?: number
-  description?: string | null   // <-- ΝΕΟ
+  description?: string | null
+  created_at?: string
 }
-type Settings = { currency: string; prefix_enabled: boolean; prefix_text: string; prefix_compact: boolean }
 
-function pad(n: number, w: number){ return String(n).padStart(w,'0') }
-function fileExt(name: string){ const i=name.lastIndexOf('.'); return i>=0?name.slice(i+1).toLowerCase():'jpg' }
+type FormState = {
+  id?: string
+  category_code: string
+  code: string
+  name: string
+  description: string
+  price: string
+  stock: string
+  image_url: string | null
+}
 
-export default function ProductsPage(){
+const toNum = (v: string) => {
+  if (!v) return 0
+  const n = parseFloat(v.replace(',', '.'))
+  return isNaN(n) ? 0 : n
+}
+
+export default function ProductsPage() {
   const [orgId, setOrgId] = useState<string | null>(null)
-  const [settings, setSettings] = useState<Settings | null>(null)
   const [cats, setCats] = useState<Category[]>([])
-  const [list, setList] = useState<Product[]>([])
+  const [rows, setRows] = useState<Product[]>([])
+  const [q, setQ] = useState('')
+
+  const [err, setErr] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState<string|null>(null)
-  const [ok, setOk] = useState<string|null>(null)
 
-  // -------- CREATE FORM --------
-  const [name, setName] = useState('')
-  const [cat, setCat] = useState('')
-  const [price, setPrice] = useState<number>(0)
-  const [stock, setStock] = useState<number>(0)
-  const [low, setLow] = useState<number>(2)
-  const [nextIndex, setNextIndex] = useState<number>(1)
-  const [imgFile, setImgFile] = useState<File | null>(null)
-  const [imgPreview, setImgPreview] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [editing, setEditing] = useState<boolean>(false)
+  const [form, setForm] = useState<FormState>({
+    category_code: '',
+    code: '',
+    name: '',
+    description: '',
+    price: '0',
+    stock: '0',
+    image_url: null
+  })
 
-  // -------- EDIT MODAL --------
-  const [showEdit, setShowEdit] = useState(false)
-  const [editOrig, setEditOrig] = useState<Product | null>(null)
-  const [eName, setEName] = useState(''); const [eCat, setECat] = useState('')
-  const [ePrice, setEPrice] = useState<number>(0); const [eStock, setEStock] = useState<number>(0)
-  const [eLow, setELow] = useState<number>(0)
-  const [eImgFile, setEImgFile] = useState<File | null>(null)
-  const [eImgPreview, setEImgPreview] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const fileRef = useRef<HTMLInputElement | null>(null)
 
-  const codePreview = useMemo(() => {
-    if (!cat) return '—'
-    const idx = pad(nextIndex, 4)
-    if (!settings) return `${cat}-${idx}`
-    if (settings.prefix_enabled && settings.prefix_compact) return `${settings.prefix_text}${cat}${idx.slice(0,3)}`
-    if (settings.prefix_enabled) return `${settings.prefix_text}${cat}${idx}`
-    return `${cat}-${idx}`
-  }, [cat, nextIndex, settings])
-
-  function clearCreate(){
-    setName(''); setCat(''); setPrice(0); setStock(0); setLow(2); setNextIndex(1)
-    setImgFile(null); setImgPreview(null); setErr(null); setOk(null)
-  }
-
-  // ---------- LOAD ----------
+  // ------------ Load org + data -------------
   useEffect(() => {
     (async () => {
       setLoading(true); setErr(null)
       const mem = await supabase.from('org_members').select('org_id').limit(1)
       const oid = mem.data?.[0]?.org_id || null
       setOrgId(oid)
-
-      if (oid){
-        const { data: set } = await supabase.from('settings')
-          .select('currency,prefix_enabled,prefix_text,prefix_compact').eq('org_id', oid).single()
-        setSettings(set as any)
-
-        const { data: c } = await supabase.from('categories')
-          .select('code,name').eq('org_id', oid).order('code')
-        setCats(c || [])
-
-        const { data: p } = await supabase.from('products')
-          .select('id,code,name,category_code,price,stock,low_stock,image_url')
-          .eq('org_id', oid).order('code')
-        setList(p || [])
+      if (oid) {
+        await Promise.all([loadCats(oid), loadProducts(oid)])
       }
       setLoading(false)
     })()
   }, [])
 
-  // επόμενο αύξοντα όταν αλλάζει κατηγορία
-  useEffect(() => {
-    (async () => {
-      if (!orgId || !cat){ setNextIndex(1); return }
-      const { count } = await supabase.from('products')
-        .select('*',{count:'exact',head:true})
-        .eq('org_id', orgId).eq('category_code', cat)
-      setNextIndex((count||0)+1)
-    })()
-  }, [orgId, cat])
+  async function loadCats(oid: string) {
+    // Προσάρμοσε εάν το table σου λέγεται αλλιώς (π.χ. categories)
+    const { data, error } = await supabase
+      .from('categories')
+      .select('code,name')
+      .eq('org_id', oid)
+      .order('code')
+    if (!error) setCats((data || []) as any)
+  }
 
-  // ---------- CREATE ----------
-  function onPickImage(e: React.ChangeEvent<HTMLInputElement>){
-    const f = e.target.files?.[0] || null
-    if (!f){ setImgFile(null); setImgPreview(null); return }
-    if (!/^image\//.test(f.type)){ setErr('Επίλεξε εικόνα (jpg/png/webp).'); return }
-    if (f.size > 2*1024*1024){ setErr('Μέγιστο μέγεθος 2MB.'); return }
-    setErr(null); setImgFile(f); setImgPreview(URL.createObjectURL(f))
+  async function loadProducts(oid: string) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id,org_id,code,category_code,name,price,stock,avg_cost,image_url,description,created_at')
+      .eq('org_id', oid)
+      .order('code')
+    if (error) setErr(error.message)
+    else setRows((data || []) as Product[])
   }
-  async function uploadImage(org: string, code: string, file: File){
-    setUploading(true)
-    try{
-      const ext = fileExt(file.name)
-      const path = `${org}/${code}-${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('product-images')
-        .upload(path, file, { cacheControl: '3600', upsert: true, contentType: file.type })
-      if (error) throw error
-      const { data } = supabase.storage.from('product-images').getPublicUrl(path)
-      return data.publicUrl || null
-    } finally { setUploading(false) }
+
+  // ------------ Helpers -------------
+  const filtered = useMemo(() => {
+    const x = q.trim().toLowerCase()
+    if (!x) return rows
+    return rows.filter(r =>
+      r.code?.toLowerCase().includes(x) ||
+      r.name?.toLowerCase().includes(x) ||
+      r.category_code?.toLowerCase().includes(x)
+    )
+  }, [rows, q])
+
+  function resetForm() {
+    setEditing(false)
+    setForm({
+      category_code: '',
+      code: '',
+      name: '',
+      description: '',
+      price: '0',
+      stock: '0',
+      image_url: null
+    })
+    if (fileRef.current) fileRef.current.value = ''
+    setErr(null); setOk(null)
   }
-  async function addProduct(e: React.FormEvent){
+
+  // Παράγει κωδικό τύπου "CC-PPPP" όπου CC=2 ψηφία κατηγορίας
+  function buildCode(category_code: string, nextIndex: number) {
+    const cc = category_code.padStart(2, '0').slice(-2)
+    return `${cc}-${String(nextIndex).padStart(4, '0')}`
+  }
+
+  // Βρίσκει το επόμενο index για την κατηγορία, αναλύοντας τους υπάρχοντες κωδικούς
+  function nextIndexForCategory(category_code: string) {
+    const cc = category_code.padStart(2, '0').slice(-2)
+    const prefix = `${cc}-`
+    const nums = rows
+      .filter(r => r.category_code === cc && r.code?.startsWith(prefix))
+      .map(r => {
+        const tail = r.code.replace(prefix, '')
+        const n = parseInt(tail, 10)
+        return isNaN(n) ? 0 : n
+      })
+    const max = nums.length ? Math.max(...nums) : 0
+    return max + 1
+  }
+
+  async function handleCategoryChange(newCat: string) {
+    const cc = newCat.padStart(2, '0').slice(-2)
+    const next = nextIndexForCategory(cc)
+    setForm(f => ({ ...f, category_code: cc, code: buildCode(cc, next) }))
+  }
+
+  // ------------ Image upload -------------
+  async function uploadImageIfAny(): Promise<string | null> {
+    const file = fileRef.current?.files?.[0]
+    if (!file) return form.image_url || null
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const stamp = Date.now()
+    const path = `${orgId}/products/${form.code || 'no-code'}-${stamp}.${ext}`
+
+    // Βεβαιώσου ότι έχεις public bucket 'product-images'
+    const { error: upErr } = await supabase.storage.from('product-images').upload(path, file, { upsert: true })
+    if (upErr) { setErr(upErr.message); return form.image_url || null }
+
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+    return data.publicUrl || null
+  }
+
+  // ------------ Create / Update -------------
+  async function save(e: React.FormEvent) {
     e.preventDefault()
     if (!orgId) return
-    if (!cat || !name.trim()){ setErr('Συμπλήρωσε Όνομα και Κατηγορία.'); return }
+    if (!form.category_code) { setErr('Διάλεξε κατηγορία.'); return }
+    if (!form.code) { setErr('Δεν δημιουργήθηκε κωδικός προϊόντος.'); return }
+    if (!form.name.trim()) { setErr('Γράψε όνομα προϊόντος.'); return }
+
     setErr(null); setOk(null)
+    const imageUrl = await uploadImageIfAny()
 
-    const idx = pad(nextIndex, 4)
-    let code = `${cat}-${idx}`
-    if (settings){
-      if (settings.prefix_enabled && settings.prefix_compact) code = `${settings.prefix_text}${cat}${idx.slice(0,3)}`
-      else if (settings.prefix_enabled) code = `${settings.prefix_text}${cat}${idx}`
+    const payload = {
+      org_id: orgId,
+      code: form.code,
+      category_code: form.category_code,
+      name: form.name.trim(),
+      description: form.description?.trim() || null,
+      price: toNum(form.price),
+      stock: toNum(form.stock),
+      image_url: imageUrl
     }
 
-    let uploadedUrl: string | null = null
-    if (imgFile) uploadedUrl = await uploadImage(orgId, code, imgFile)
-
-    const { error } = await supabase.from('products').insert([{
-      org_id: orgId, code, category_code: cat, product_index: nextIndex,
-      name, description: '', supplier: '',
-      image_url: uploadedUrl || '',
-      cost: 0, avg_cost: 0,
-      price: Number(price)||0, stock: Number(stock)||0, low_stock: Number(low)||0,
-      active: true
-    }])
-    if (error){ setErr(error.message); return }
-
-    const { data: p } = await supabase.from('products')
-      .select('id,code,name,category_code,price,stock,low_stock,image_url')
-      .eq('org_id', orgId).order('code')
-    setList(p || [])
-    clearCreate(); setOk('Το προϊόν καταχωρήθηκε.')
-  }
-
-  // ---------- EDIT ----------
-  function openEdit(p: Product){
-    setEditOrig(p)
-    setEName(p.name); setECat(p.category_code)
-    setEPrice(p.price); setEStock(p.stock); setELow(p.low_stock)
-    setEImgFile(null); setEImgPreview(p.image_url || null)
-    setShowEdit(true); setErr(null); setOk(null)
-  }
-  function onPickImageEdit(e: React.ChangeEvent<HTMLInputElement>){
-    const f = e.target.files?.[0] || null
-    if (!f){ setEImgFile(null); setEImgPreview(editOrig?.image_url || null); return }
-    if (!/^image\//.test(f.type)){ setErr('Επίλεξε εικόνα (jpg/png/webp).'); return }
-    if (f.size > 2*1024*1024){ setErr('Μέγιστο μέγεθος 2MB.'); return }
-    setEImgFile(f); setEImgPreview(URL.createObjectURL(f))
-  }
-  async function saveEdit(){
-    if (!orgId || !editOrig) return
-    setSaving(true); setErr(null); setOk(null)
-    try{
-      let newUrl = editOrig.image_url
-      if (eImgFile){
-        newUrl = await uploadImage(orgId, editOrig.code, eImgFile)
+    try {
+      if (editing && form.id) {
+        const { error } = await supabase.from('products').update(payload)
+          .eq('org_id', orgId).eq('id', form.id)
+        if (error) throw error
+        setOk('Το προϊόν ενημερώθηκε.')
+      } else {
+        const { error } = await supabase.from('products').insert([payload])
+        if (error) throw error
+        setOk('Το προϊόν δημιουργήθηκε.')
       }
-      const { error } = await supabase.from('products').update({
-        name: eName,
-        category_code: eCat,
-        price: Number(ePrice)||0,
-        stock: Number(eStock)||0,
-        low_stock: Number(eLow)||0,
-        image_url: newUrl || ''
-      }).eq('org_id', orgId).eq('code', editOrig.code)
-      if (error) throw error
-
-      const { data: p } = await supabase.from('products')
-        .select('id,code,name,category_code,price,stock,low_stock,image_url')
-        .eq('org_id', orgId).order('code')
-      setList(p || [])
-      setShowEdit(false); setOk('Το προϊόν ενημερώθηκε.')
-    } catch(e:any){
-      setErr(e.message || 'Αποτυχία ενημέρωσης προϊόντος')
-    } finally {
-      setSaving(false)
+      await loadProducts(orgId)
+      resetForm()
+    } catch (e: any) {
+      setErr(e.message || 'Σφάλμα αποθήκευσης.')
     }
   }
-  async function deleteProduct(p: Product){
-    if (!orgId) return
-    if (!confirm(`Διαγραφή προϊόντος ${p.code};`)) return
-    const { error } = await supabase.from('products').delete()
-      .eq('org_id', orgId).eq('code', p.code)
-    if (error){ setErr(error.message); return }
-    const { data: nd } = await supabase.from('products')
-      .select('id,code,name,category_code,price,stock,low_stock,image_url')
-      .eq('org_id', orgId).order('code')
-    setList(nd || [])
+
+  function editRow(p: Product) {
+    setEditing(true)
+    setForm({
+      id: p.id,
+      category_code: p.category_code || '',
+      code: p.code || '',
+      name: p.name || '',
+      description: p.description || '',
+      price: String(p.price ?? 0),
+      stock: String(p.stock ?? 0),
+      image_url: p.image_url || null
+    })
+    setErr(null); setOk(null)
+    if (fileRef.current) fileRef.current.value = ''
   }
 
+  async function delRow(p: Product) {
+    if (!orgId) return
+    if (!confirm(`Διαγραφή προϊόντος ${p.code} – ${p.name};`)) return
+    const { error } = await supabase.from('products').delete().eq('org_id', orgId).eq('id', p.id)
+    if (error) setErr(error.message)
+    else {
+      setOk('Διαγράφηκε.')
+      await loadProducts(orgId)
+    }
+  }
+
+  // ------------ UI -------------
   return (
     <RequireAuth>
       <Layout>
         <h1 className="text-xl font-semibold mb-4">Προϊόντα</h1>
 
-        {!orgId && <div className="card mb-4 text-sm">Δεν βρέθηκε οργάνωση (org_members).</div>}
+        {/* Φόρμα Δημιουργίας/Επεξεργασίας */}
+        <form onSubmit={save} className="card mb-6 grid gap-3">
+          <div className="text-lg font-medium">{editing ? '✏️ Επεξεργασία Προϊόντος' : '➕ Νέο Προϊόν'}</div>
 
-        {/* CREATE */}
-        <form onSubmit={addProduct} className="card mb-6 grid gap-3">
-          <div className="text-lg font-medium">➕ Νέο Προϊόν</div>
-
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-1">🛒 Όνομα</label>
-              <input className="input" placeholder="π.χ. Κάμερα IP 4MP"
-                     value={name} onChange={e=>setName(e.target.value)} />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+            {/* Κατηγορία */}
             <div>
-<label className="block text-sm font-medium mb-1">📝 Περιγραφή (μικρή)</label>
-<textarea
-  className="input"
-  rows={3}
-  placeholder="π.χ. Κάμερα 8MP, φακός 2.8mm, IR 30m, IP67"
-  value={form.description || ''}
-  onChange={(e)=> setForm({...form, description: e.target.value})}
-/>
-   </div>
-
-
-            <div>
-              <label className="block text-sm font-medium mb-1">📁 Κατηγορία</label>
-              <select className="input" value={cat} onChange={e=>setCat(e.target.value)}>
+              <label className="block text-sm font-medium mb-1">🗂️ Κατηγορία</label>
+              <select
+                className="input"
+                value={form.category_code}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+              >
                 <option value="">— Επιλέξτε —</option>
-                {cats.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+                {cats.map(c => (
+                  <option key={c.code} value={c.code}>{c.code.padStart(2,'0')} — {c.name}</option>
+                ))}
               </select>
             </div>
 
+            {/* Κωδικός (readonly αν θες) */}
             <div>
-              <label className="block text-sm font-medium mb-1">🏷️ Κωδικός (auto)</label>
-              <input className="input" value={codePreview} readOnly />
+              <label className="block text-sm font-medium mb-1">🏷️ Κωδικός</label>
+              <input
+                className="input"
+                value={form.code}
+                onChange={(e)=> setForm({...form, code: e.target.value.trim()})}
+                placeholder="π.χ. 01-0001"
+              />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">💶 Τιμή Πώλησης (€)</label>
-              <input className="input" type="number" step="0.01" placeholder="π.χ. 45.00"
-                     value={price} onChange={e=>setPrice(parseFloat(e.target.value||'0'))} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">📦 Απόθεμα</label>
-              <input className="input" type="number" placeholder="π.χ. 10"
-                     value={stock} onChange={e=>setStock(parseInt(e.target.value||'0'))} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">⚠️ Όριο Χαμηλού Αποθέματος</label>
-              <input className="input" type="number" placeholder="π.χ. 2"
-                     value={low} onChange={e=>setLow(parseInt(e.target.value||'0'))} />
-            </div>
-
+            {/* Όνομα */}
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-1">📷 Εικόνα Προϊόντος</label>
-              <input className="input" type="file" accept="image/*" onChange={onPickImage} />
-              {imgPreview && (
-                <div className="mt-2">
-                  <img src={imgPreview} alt="preview"
-                       style={{width:120,height:120,objectFit:'cover',borderRadius:8,border:'1px solid #ddd'}}/>
-                </div>
-              )}
-              {uploading && <div className="text-xs text-gray-500 mt-1">Ανέβασμα εικόνας…</div>}
+              <label className="block text-sm font-medium mb-1">📦 Όνομα</label>
+              <input
+                className="input"
+                value={form.name}
+                onChange={(e)=> setForm({...form, name: e.target.value})}
+                placeholder="π.χ. Κάμερα 8MP"
+              />
+            </div>
+
+            {/* Τιμή */}
+            <div>
+              <label className="block text-sm font-medium mb-1">💶 Τιμή</label>
+              <input
+                className="input"
+                type="text"
+                inputMode="decimal"
+                value={form.price}
+                onChange={(e)=> setForm({...form, price: e.target.value.replace(/[^\d,.\-]/g,'') })}
+                placeholder="π.χ. 120,00"
+              />
+            </div>
+
+            {/* Απόθεμα */}
+            <div>
+              <label className="block text-sm font-medium mb-1">🔢 Απόθεμα</label>
+              <input
+                className="input"
+                type="text"
+                inputMode="decimal"
+                value={form.stock}
+                onChange={(e)=> setForm({...form, stock: e.target.value.replace(/[^\d,.\-]/g,'') })}
+                placeholder="π.χ. 5"
+              />
+            </div>
+
+            {/* Περιγραφή */}
+            <div className="md:col-span-6">
+              <label className="block text-sm font-medium mb-1">📝 Περιγραφή (μικρή)</label>
+              <textarea
+                className="input"
+                rows={3}
+                placeholder="π.χ. Κάμερα 8MP, φακός 2.8mm, IR 30m, IP67"
+                value={form.description}
+                onChange={(e)=> setForm({...form, description: e.target.value})}
+              />
+            </div>
+
+            {/* Εικόνα */}
+            <div className="md:col-span-6">
+              <label className="block text-sm font-medium mb-1">🖼️ Εικόνα προϊόντος</label>
+              <div className="flex items-center gap-3">
+                <input ref={fileRef} className="input" type="file" accept="image/*" />
+                {form.image_url
+                  ? <img src={form.image_url} alt="" style={{width:64,height:64,objectFit:'cover',border:'1px solid #eee',borderRadius:8}}/>
+                  : <span className="text-xs text-gray-500">— Καμία εικόνα</span>}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Αν δεν επιλέξεις αρχείο, θα μείνει η υπάρχουσα εικόνα (αν υπάρχει).</div>
             </div>
           </div>
 
           {err && <div className="text-red-600 text-sm">{err}</div>}
-          {ok && <div className="text-green-700 text-sm">{ok}</div>}
+          {ok  && <div className="text-green-700 text-sm">{ok}</div>}
 
           <div className="flex gap-2">
-            <button className="btn btn-primary" type="submit" disabled={uploading}>Καταχώριση</button>
-            <button className="btn" type="button" onClick={clearCreate}>Καθαρισμός</button>
+            <button className="btn btn-primary" type="submit">{editing ? 'Αποθήκευση αλλαγών' : 'Αποθήκευση'}</button>
+            <button className="btn" type="button" onClick={resetForm}>Καθαρισμός</button>
           </div>
         </form>
 
-        {/* LIST */}
-        {loading ? <div>Φόρτωση…</div> :
-          (list.length === 0
-            ? <div className="text-sm text-gray-600">Δεν υπάρχουν προϊόντα ακόμα.</div>
-            : <div className="grid gap-2">
-                {list.map(p => (
-                  <div key={p.id} className="card grid grid-cols-7 gap-3 items-center">
-                    <div className="flex items-center gap-3 col-span-2">
-                      {p.image_url
-                        ? <img src={p.image_url} alt={p.name}
-                               style={{width:48,height:48,objectFit:'cover',borderRadius:6}}/>
-                        : <div style={{width:48,height:48,background:'#f1f1f1',borderRadius:6,
-                                       display:'flex',alignItems:'center',justifyContent:'center',
-                                       fontSize:12,color:'#888'}}>no img</div>}
-                      <div>
-                        <div className="font-mono text-sm">{p.code}</div>
-                        <div className="text-sm">{p.name}</div>
-                      </div>
-                    </div>
-                    <div className="text-sm">{p.category_code}</div>
-                    <div className="text-sm">Τιμή: {Number(p.price||0).toLocaleString()}</div>
-                    <div className="text-sm">Στοκ: {p.stock} (Low {p.low_stock})</div>
-                    <div className="flex gap-2 justify-end">
-                      <button className="btn" onClick={()=>openEdit(p)}>✏️ Επεξεργασία</button>
-                      <button className="btn" onClick={()=>deleteProduct(p)}>🗑️</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-          )
-        }
-
-        {/* EDIT MODAL */}
-        {showEdit && editOrig && (
-          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.35)'}} onClick={()=>!saving&&setShowEdit(false)}>
-            <div className="card" style={{position:'absolute',left:'50%',top:'50%',transform:'translate(-50%,-50%)',width:'min(720px,92vw)'}} onClick={e=>e.stopPropagation()}>
-              <div className="text-lg font-medium mb-2">✏️ Επεξεργασία: <span className="font-mono">{editOrig.code}</span></div>
-
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end mb-3">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">🛒 Όνομα</label>
-                  <input className="input" value={eName} onChange={e=>setEName(e.target.value)} />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">📁 Κατηγορία</label>
-                  <select className="input" value={eCat} onChange={e=>setECat(e.target.value)}>
-                    {cats.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">💶 Τιμή Πώλησης (€)</label>
-                  <input className="input" type="number" step="0.01" value={ePrice}
-                         onChange={e=>setEPrice(parseFloat(e.target.value||'0'))} />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">📦 Απόθεμα</label>
-                  <input className="input" type="number" value={eStock}
-                         onChange={e=>setEStock(parseInt(e.target.value||'0'))} />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">⚠️ Όριο Χαμηλού Αποθέματος</label>
-                  <input className="input" type="number" value={eLow}
-                         onChange={e=>setELow(parseInt(e.target.value||'0'))} />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">📷 Εικόνα</label>
-                  <input className="input" type="file" accept="image/*" onChange={onPickImageEdit} />
-                  {eImgPreview && (
-                    <div className="mt-2">
-                      <img src={eImgPreview} alt="preview" style={{width:120,height:120,objectFit:'cover',borderRadius:8,border:'1px solid #ddd'}}/>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {err && <div className="text-red-600 text-sm">{err}</div>}
-              {ok && <div className="text-green-700 text-sm">{ok}</div>}
-
-              <div className="flex gap-2 justify-end">
-                <button className="btn" onClick={()=>!saving&&setShowEdit(false)}>Κλείσιμο</button>
-                <button className="btn btn-primary" onClick={saveEdit} disabled={saving}>{saving?'Αποθήκευση…':'Αποθήκευση'}</button>
-              </div>
-            </div>
+        {/* ΛΙΣΤΑ */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-lg font-medium">📃 Λίστα Προϊόντων</div>
+            <input className="input w-60" placeholder="Αναζήτηση…" value={q} onChange={e=>setQ(e.target.value)} />
           </div>
-        )}
+
+          {loading ? (
+            <div>Φόρτωση…</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-sm text-gray-600">Δεν βρέθηκαν προϊόντα.</div>
+          ) : (
+            <div className="overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-left text-gray-500">
+                  <tr>
+                    <th className="py-2 pr-4">Κωδικός</th>
+                    <th className="py-2 pr-4">Κατηγορία</th>
+                    <th className="py-2 pr-4">Όνομα</th>
+                    <th className="py-2 pr-4">Περιγραφή</th>
+                    <th className="py-2 pr-4 text-right">Τιμή</th>
+                    <th className="py-2 pr-4 text-right">Απόθεμα</th>
+                    <th className="py-2">Ενέργειες</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(p => (
+                    <tr key={p.id} className="border-t align-top">
+                      <td className="py-2 pr-4 font-mono whitespace-nowrap">{p.code}</td>
+                      <td className="py-2 pr-4">{p.category_code}</td>
+                      <td className="py-2 pr-4">{p.name}</td>
+                      <td className="py-2 pr-4">
+                        <div className="line-clamp-2 max-w-[420px]">{p.description || <span className="text-gray-400">—</span>}</div>
+                        {p.image_url && <img src={p.image_url} alt="" style={{width:48,height:48,objectFit:'cover',border:'1px solid #eee',borderRadius:6,marginTop:6}}/>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">{Number(p.price||0).toLocaleString('el-GR',{minimumFractionDigits:2})}</td>
+                      <td className="py-2 pr-4 text-right">{Number(p.stock||0).toLocaleString('el-GR')}</td>
+                      <td className="py-2">
+                        <div className="flex gap-2">
+                          <button className="btn" onClick={()=>editRow(p)}>✏️</button>
+                          <button className="btn" onClick={()=>delRow(p)}>🗑️</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </Layout>
     </RequireAuth>
   )

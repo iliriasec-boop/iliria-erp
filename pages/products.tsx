@@ -220,7 +220,7 @@ export default function ProductsPage(){
               <input className="input" placeholder="π.χ. Κάμερα IP 4MP"
                      value={name} onChange={e=>setName(e.target.value)} />
             </div>
-            // Στη φόρμα προϊόντος – κάτω από το "Όνομα"
+            <div>
 <label className="block text-sm font-medium mb-1">📝 Περιγραφή (μικρή)</label>
 <textarea
   className="input"
@@ -229,6 +229,7 @@ export default function ProductsPage(){
   value={form.description || ''}
   onChange={(e)=> setForm({...form, description: e.target.value})}
 />
+   </div>
 
 
             <div>

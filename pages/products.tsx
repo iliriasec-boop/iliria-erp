@@ -118,11 +118,12 @@ export default function ProductsPage() {
     setErr(null); setOk(null)
   }
 
-  // Παράγει κωδικό τύπου "CC-PPPP" όπου CC=2 ψηφία κατηγορίας
-  function buildCode(category_code: string, nextIndex: number) {
-    const cc = category_code.padStart(2, '0').slice(-2)
-    return `${cc}-${String(nextIndex).padStart(4, '0')}`
-  }
+  // ΜΕΤΑ (βγάζει IS010001)
+function buildCode(category_code: string, nextIndex: number) {
+  const cc = category_code.padStart(2, '0').slice(-2)
+  return `IS${cc}${String(nextIndex).padStart(4, '0')}`
+}
+
 
   // Βρίσκει το επόμενο index για την κατηγορία, αναλύοντας τους υπάρχοντες κωδικούς
   function nextIndexForCategory(category_code: string) {

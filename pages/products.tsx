@@ -186,7 +186,7 @@ function buildCode(category_code: string, nextIdx: number) {
   const img = await uploadImageIfAny()
 
   if (!editing) {
-    // ΥΠΟΛΟΓΙΖΟΥΜΕ index+code ΓΙΑ ΤΗΝ ΚΑΙΝΟΥΡΓΙΑ ΚΑΤΑΧΩΡΙΣΗ
+    // Υπολογίζουμε index + κωδικό ΓΙΑ ΝΕΟ προϊόν
     const idx = nextIndexForCategory(form.category_code)
     const newCode = buildCode(form.category_code, idx)
 
@@ -198,29 +198,30 @@ function buildCode(category_code: string, nextIdx: number) {
       description: form.description?.trim() || null,
       price: toNum(form.price),
       stock: toNum(form.stock),
-      low_stock: toNum(form.low),
+      low_stock: toNum((form as any).low ?? '2'), // αν έχεις πεδίο "low"
       image_url: img,
-      product_index: idx             // <-- ΠΕΡΝΑΜΕ ΤΟ index (NOT NULL)
+      product_index: idx        // <<< ΣΗΜΑΝΤΙΚΟ: περνάμε το index γιατί στη DB είναι NOT NULL
     }
 
     const { error } = await supabase.from('products').insert([payload])
     if (error) { setErr(error.message); return }
     setOk('Καταχωρήθηκε.')
   } else {
-    // ΣΤΟ UPDATE δεν αλλάζουμε product_index/κωδικό
+    // Στο UPDATE δεν αλλάζουμε code / product_index
     const payload = {
       category_code: form.category_code,
       name: form.name.trim(),
       description: form.description?.trim() || null,
       price: toNum(form.price),
       stock: toNum(form.stock),
-      low_stock: toNum(form.low),
+      low_stock: toNum((form as any).low ?? '2'),
       image_url: img
     }
-    const { error } = await supabase.from('products')
+    const { error } = await supabase
+      .from('products')
       .update(payload)
       .eq('org_id', orgId)
-      .eq('id', form.id)
+      .eq('id', (form as any).id)
     if (error) { setErr(error.message); return }
     setOk('Ενημερώθηκε.')
   }
@@ -228,6 +229,7 @@ function buildCode(category_code: string, nextIdx: number) {
   await loadProducts(orgId)
   resetForm()
 }
+
 
 
   function editRow(p: Product) {

@@ -120,20 +120,17 @@ export default function ProductsPage() {
     setErr(null); setOk(null)
   }
 
-  // ΜΕΤΑ (βγάζει IS010001)
-function buildCode(category_code: string, nextIndex: number) {
-  const cc = category_code.padStart(2, '0').slice(-2)
-  return `IS${cc}${String(nextIndex).padStart(4, '0')}`
-}
-  
+ // Διαβάζει το index από τον κωδικό για κατηγορία cc ('01', '02' κτλ)
+// Υποστηρίζει ΚΑΙ τα δύο format: "01-0001" (παλιό), "IS010001" (νέο)
 function getIndexFromCode(code: string, cc: string): number {
   if (!code) return 0
-  // παλιό format: 01-0001
+
+  // Παλιό: 01-0001
   const oldRe = new RegExp(`^${cc}-([0-9]{4})$`)
   const m1 = code.match(oldRe)
   if (m1) return parseInt(m1[1], 10)
 
-  // νέο format: IS010001
+  // Νέο: IS010001
   const newRe = new RegExp(`^IS${cc}([0-9]{4})$`)
   const m2 = code.match(newRe)
   if (m2) return parseInt(m2[1], 10)
@@ -141,8 +138,7 @@ function getIndexFromCode(code: string, cc: string): number {
   return 0
 }
 
-  // Βρίσκει το επόμενο index για την κατηγορία, αναλύοντας τους υπάρχοντες κωδικούς
-  function nextIndexForCategory(category_code: string) {
+function nextIndexForCategory(category_code: string) {
   const cc = category_code.padStart(2, '0').slice(-2)
   const nums = rows
     .filter(r => (r.category_code || '').padStart(2,'0').slice(-2) === cc)
@@ -150,6 +146,12 @@ function getIndexFromCode(code: string, cc: string): number {
     .filter(n => n > 0)
   const max = nums.length ? Math.max(...nums) : 0
   return max + 1
+}
+
+// Χτίζει ΝΕΟ κωδικό στο format "IS010001"
+function buildCode(category_code: string, nextIdx: number) {
+  const cc = category_code.padStart(2, '0').slice(-2)
+  return `IS${cc}${String(nextIdx).padStart(4, '0')}`
 }
 
   async function handleCategoryChange(newCat: string) {

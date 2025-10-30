@@ -123,22 +123,32 @@ function buildCode(category_code: string, nextIndex: number) {
   const cc = category_code.padStart(2, '0').slice(-2)
   return `IS${cc}${String(nextIndex).padStart(4, '0')}`
 }
+  
+function getIndexFromCode(code: string, cc: string): number {
+  if (!code) return 0
+  // παλιό format: 01-0001
+  const oldRe = new RegExp(`^${cc}-([0-9]{4})$`)
+  const m1 = code.match(oldRe)
+  if (m1) return parseInt(m1[1], 10)
 
+  // νέο format: IS010001
+  const newRe = new RegExp(`^IS${cc}([0-9]{4})$`)
+  const m2 = code.match(newRe)
+  if (m2) return parseInt(m2[1], 10)
+
+  return 0
+}
 
   // Βρίσκει το επόμενο index για την κατηγορία, αναλύοντας τους υπάρχοντες κωδικούς
   function nextIndexForCategory(category_code: string) {
-    const cc = category_code.padStart(2, '0').slice(-2)
-    const prefix = `${cc}-`
-    const nums = rows
-      .filter(r => r.category_code === cc && r.code?.startsWith(prefix))
-      .map(r => {
-        const tail = r.code.replace(prefix, '')
-        const n = parseInt(tail, 10)
-        return isNaN(n) ? 0 : n
-      })
-    const max = nums.length ? Math.max(...nums) : 0
-    return max + 1
-  }
+  const cc = category_code.padStart(2, '0').slice(-2)
+  const nums = rows
+    .filter(r => (r.category_code || '').padStart(2,'0').slice(-2) === cc)
+    .map(r => getIndexFromCode(r.code || '', cc))
+    .filter(n => n > 0)
+  const max = nums.length ? Math.max(...nums) : 0
+  return max + 1
+}
 
   async function handleCategoryChange(newCat: string) {
     const cc = newCat.padStart(2, '0').slice(-2)
